@@ -1,17 +1,40 @@
 require("dotenv").config();
 const express = require("express");
 const ejs = require("ejs");
+const path = require("path");
+const fs = require("fs");
 const mongoose = require("mongoose");
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 var GoogleStrategy = require("passport-google-oauth20").Strategy;
 var findOrCreate = require("mongoose-findorcreate");
+var _ = require("lodash");
+
+const connectDB = require("./config/db");
+const { csvParseMongo } = require("./utility/csvParserMongo");
+const WordListModel = require("./models/WordList");
 
 const app = express();
+connectDB();
+
+const directoryPath = path.join(__dirname, "csvs");
+fs.readdir(directoryPath, function (err, files) {
+  if (err) {
+    return console.log("Unable to scan directory: " + err);
+  }
+  //listing all files using forEach
+  files.forEach(function (file) {
+    // Do whatever you want to do with the file
+    if (file.substr(0, 8) === "WordList") {
+      csvParseMongo("./csvs/" + file);
+      // console.log(file);
+    }
+  });
+});
 
 app.set("view engine", "ejs");
-app.use(express.static("public"));
+app.use(express.static(__dirname + "/public"));
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
@@ -37,7 +60,7 @@ passport.use(
   )
 );
 
-mongoose.connect("mongodb://localhost:27017/userDB");
+// mongoose.connect("mongodb://localhost:27017/userDB");
 
 const userSchema = new mongoose.Schema({
   email: String,
@@ -75,6 +98,29 @@ app.get(
   }
 );
 
+app.get("/wordlist/:customList", function (req, res) {
+  if (req.isAuthenticated()) {
+    WordListModel.find(function (err, docs) {
+      if (err) {
+        console.log(err);
+      } else {
+        // console.log(docs);
+        WordListModel.findOne(
+          { WordListName: req.params.customList },
+          function (err, doc) {
+            if (err) {
+              console.log(err);
+            } else {
+              // console.log(doc);
+              res.render("test", { test: doc.parsed, wordList: docs });
+            }
+          }
+        );
+      }
+    });
+  }
+});
+
 app.get("/", function (req, res) {
   res.render("home");
 });
@@ -89,7 +135,14 @@ app.get("/register", function (req, res) {
 
 app.get("/secrets", function (req, res) {
   if (req.isAuthenticated()) {
-    res.render("secrets");
+    WordListModel.find(function (err, docs) {
+      if (err) {
+        console.log(err);
+      } else {
+        // console.log(docs);
+        res.render("test", { test: [], wordList: docs });
+      }
+    });
   } else {
     res.redirect("/login");
   }
